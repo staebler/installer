@@ -17,7 +17,7 @@
     },
     "numberOfMasters" : {
       "type" : "int",
-      "defaultValue" : 1,
+      "defaultValue" : 3,
       "minValue" : 1,
       "maxValue" : 30,
       "metadata" : {
@@ -32,21 +32,6 @@
     },
     "diagnosticsStorageAccountName": {
       "type": "string"
-    },
-    "diagnosticsStorageAccountId": {
-      "type": "string"
-    },
-    "diagnosticsStorageAccountType": {
-      "type": "string"
-    },
-    "diagnosticsStorageAccountKind": {
-      "type": "string"
-    },
-    "vmSettings" : {
-      "type" : "object",
-      "defaultValue" : {
-        "count" : 3
-      }
     },
     "masterVMSize" : {
       "type" : "string",
@@ -138,17 +123,16 @@
     "masterSubnetName" : "[concat(parameters('baseName'), '-master-subnet')]",
     "masterSubnetRef" : "[concat(variables('virtualNetworkID'), '/subnets/', variables('masterSubnetName'))]",
     "masterLoadBalancerName" : "[concat(parameters('baseName'), '-public-lb')]",
-    "masterAvailabilitySetName" : "[concat(parameters('baseName'), '-master-avset')]",
     "internalLoadBalancerName" : "[concat(parameters('baseName'), '-internal-lb')]",
     "sshKeyPath" : "/home/core/.ssh/authorized_keys",
     "clusterNsgName" : "[concat(parameters('baseName'), '-nsg')]",
     "imageName" : "[concat(parameters('baseName'), '-image')]",
-    "vmSettings" : "[parameters('vmSettings')]",
+    "numberOfMasters" : "[parameters('numberOfMasters')]",
     "vms" : {
       "copy" : [
         {
           "name" : "vmNames",
-          "count" :  "[parameters('vmSettings').count]",
+          "count" :  "[parameters('numberOfMasters')]",
           "input" : {
             "name" : "[concat(parameters('baseName'), string('-master-'), string(copyIndex('vmNames')))]"
           }
@@ -163,9 +147,9 @@
       "apiVersion": "2017-10-01",
       "location": "[variables('location')]",
       "properties": {},
-      "kind": "[parameters('diagnosticsStorageAccountKind')]",
+      "kind": "Storage",
       "sku": {
-        "name": "[parameters('diagnosticsStorageAccountType')]"
+        "name": "Standard_LRS"
       }
     },
     {
@@ -174,9 +158,10 @@
       "location": "[variables('location')]",
       "copy" : {
         "name" : "nicCopy",
-        "count" : "[variables('vmSettings').count]"
+        "count" : "[variables('numberOfMasters')]"
       },
       "name" : "[concat(variables('vms').vmNames[copyIndex()].name, '-nic')]",
+      "location" : "[variables('location')]",
       "properties" : {
         "ipConfigurations" : [
           {
@@ -187,9 +172,6 @@
                 "id" : "[variables('masterSubnetRef')]"
               },
               "loadBalancerBackendAddressPools" : [
-                {
-                  "id" : "[concat('/subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name, '/providers/Microsoft.Network/loadBalancers/', variables('masterLoadBalancerName'), '/backendAddressPools/public-lb-backend')]"
-                }
               ]
             }
           }
@@ -202,17 +184,15 @@
       "location" : "[variables('location')]",
       "copy" : {
         "name" : "vmCopy",
-        "count" : "[variables('vmSettings').count]"
+        "count" : "[variables('numberOfMasters')]"
       },
       "name" : "[variables('vms').vmNames[copyIndex()].name]",
+      "location" : "[variables('location')]",
       "dependsOn" : [
         "[concat('Microsoft.Network/networkInterfaces/', concat(variables('vms').vmNames[copyIndex()].name, '-nic'))]",
         "[concat('Microsoft.Storage/storageAccounts/', parameters('diagnosticsStorageAccountName'))]"
       ],
       "properties" : {
-        "availabilitySet": {
-          "id": "[resourceId('Microsoft.Compute/availabilitySets',variables('masterAvailabilitySetName'))]"
-        },
         "hardwareProfile" : {
           "vmSize" : "[parameters('masterVMSize')]"
         },
@@ -260,7 +240,7 @@
         "diagnosticsProfile": {
           "bootDiagnostics": {
             "enabled": true,
-            "storageUri": "[concat('https://', parameters('diagnosticsStorageAccountName'), '.blob.mtcazs.wwtatc.com/')]"
+            "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('diagnosticsStorageAccountName'))).primaryEndpoints.blob]"
           }
         }
       }
