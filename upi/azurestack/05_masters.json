@@ -214,7 +214,7 @@
         },
         "storageProfile" : {
           "imageReference": {
-            "id": "[resourceId('Microsoft.Compute/images', concat(variables('vms').vmNames[copyIndex()].name, '-image'))]"
+            "id": "[resourceId('Microsoft.Compute/images', variables('imageName'))]"
           },
           "osDisk" : {
             "name": "[concat(variables('vms').vmNames[copyIndex()].name, '_OSDisk')]",
