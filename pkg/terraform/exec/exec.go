@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/logutils"
@@ -32,7 +31,7 @@ var commands = map[string]cmdFunc{
 	},
 }
 
-func runner(cmd string, dir string, args []string, stdout, stderr io.Writer) int {
+func runner(cmd string, args []string, stdout, stderr io.Writer) int {
 	lf := ioutil.Discard
 	if level := logging.LogLevel(); level != "" {
 		lf = &logutils.LevelFilter{
@@ -50,7 +49,7 @@ func runner(cmd string, dir string, args []string, stdout, stderr io.Writer) int
 	sdCh, cancel := makeShutdownCh()
 	defer cancel()
 
-	pluginDirs, err := globalPluginDirs(dir)
+	pluginDirs, err := globalPluginDirs()
 	if err != nil {
 		fmt.Fprintf(stderr, "Error discovering plugin directories for Terraform: %v", err)
 		return 1
@@ -64,9 +63,6 @@ func runner(cmd string, dir string, args []string, stdout, stderr io.Writer) int
 				ErrorWriter: stderr,
 			},
 		},
-
-		OverrideDataDir: filepath.Join(dir, ".terraform"),
-
 		ShutdownCh: sdCh,
 	}
 
@@ -93,18 +89,18 @@ func runner(cmd string, dir string, args []string, stdout, stderr io.Writer) int
 }
 
 // Apply is wrapper around `terraform apply` subcommand.
-func Apply(datadir string, args []string, stdout, stderr io.Writer) int {
-	return runner("apply", datadir, args, stdout, stderr)
+func Apply(args []string, stdout, stderr io.Writer) int {
+	return runner("apply", args, stdout, stderr)
 }
 
 // Destroy is wrapper around `terraform destroy` subcommand.
-func Destroy(datadir string, args []string, stdout, stderr io.Writer) int {
-	return runner("destroy", datadir, args, stdout, stderr)
+func Destroy(args []string, stdout, stderr io.Writer) int {
+	return runner("destroy", args, stdout, stderr)
 }
 
 // Init is wrapper around `terraform init` subcommand.
-func Init(datadir string, args []string, stdout, stderr io.Writer) int {
-	return runner("init", datadir, args, stdout, stderr)
+func Init(args []string, stdout, stderr io.Writer) int {
+	return runner("init", args, stdout, stderr)
 }
 
 // makeShutdownCh creates an interrupt listener and returns a channel.

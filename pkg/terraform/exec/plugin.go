@@ -8,7 +8,7 @@ import (
 	"runtime"
 )
 
-func globalPluginDirs(datadir string) ([]string, error) {
+func globalPluginDirs() ([]string, error) {
 	var ret []string
 	// Look in ~/.terraform.d/plugins/ , or its equivalent on non-UNIX
 	cdir, err := configDir()
@@ -16,7 +16,7 @@ func globalPluginDirs(datadir string) ([]string, error) {
 		return ret, fmt.Errorf("error finding global config directory: %s", err)
 	}
 
-	for _, d := range []string{cdir, datadir} {
+	for _, d := range []string{cdir, "."} {
 		machineDir := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
 		ret = append(ret, filepath.Join(d, "plugins"))
 		ret = append(ret, filepath.Join(d, "plugins", machineDir))

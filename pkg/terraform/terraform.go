@@ -30,7 +30,13 @@ const (
 // apply'.  It returns the absolute path of the tfstate file, rooted
 // in the specified directory, along with any errors from Terraform.
 func Apply(dir string, platform string, extraArgs ...string) (path string, err error) {
-	err = unpackAndInit(dir, platform)
+	pwd, err := changeDir(dir)
+	if err != nil {
+		return "", err
+	}
+	defer os.Chdir(pwd)
+
+	err = unpackAndInit(platform)
 	if err != nil {
 		return "", err
 	}
@@ -51,7 +57,7 @@ func Apply(dir string, platform string, extraArgs ...string) (path string, err e
 	defer lpError.Close()
 
 	errBuf := &bytes.Buffer{}
-	if exitCode := texec.Apply(dir, args, lpDebug, io.MultiWriter(errBuf, lpError)); exitCode != 0 {
+	if exitCode := texec.Apply(args, lpDebug, io.MultiWriter(errBuf, lpError)); exitCode != 0 {
 		return sf, errors.Wrap(Diagnose(errBuf.String()), "failed to apply Terraform")
 	}
 	return sf, nil
@@ -61,7 +67,13 @@ func Apply(dir string, platform string, extraArgs ...string) (path string, err e
 // given directory and then runs 'terraform init' and 'terraform
 // destroy'.
 func Destroy(dir string, platform string, extraArgs ...string) (err error) {
-	err = unpackAndInit(dir, platform)
+	pwd, err := changeDir(dir)
+	if err != nil {
+		return err
+	}
+	defer os.Chdir(pwd)
+
+	err = unpackAndInit(platform)
 	if err != nil {
 		return err
 	}
@@ -80,7 +92,7 @@ func Destroy(dir string, platform string, extraArgs ...string) (err error) {
 	defer lpDebug.Close()
 	defer lpError.Close()
 
-	if exitCode := texec.Destroy(dir, args, lpDebug, lpError); exitCode != 0 {
+	if exitCode := texec.Destroy(args, lpDebug, lpError); exitCode != 0 {
 		return errors.New("failed to destroy using Terraform")
 	}
 	return nil
@@ -88,18 +100,18 @@ func Destroy(dir string, platform string, extraArgs ...string) (err error) {
 
 // unpack unpacks the platform-specific Terraform modules into the
 // given directory.
-func unpack(dir string, platform string) (err error) {
-	err = data.Unpack(dir, platform)
+func unpack(platform string) (err error) {
+	err = data.Unpack(".", platform)
 	if err != nil {
 		return err
 	}
 
-	err = data.Unpack(filepath.Join(dir, "config.tf"), "config.tf")
+	err = data.Unpack("config.tf", "config.tf")
 	if err != nil {
 		return err
 	}
 
-	err = data.Unpack(filepath.Join(dir, "terraform.rc"), "terraform.rc")
+	err = data.Unpack("terraform.rc", "terraform.rc")
 	if err != nil {
 		return err
 	}
@@ -109,13 +121,13 @@ func unpack(dir string, platform string) (err error) {
 
 // unpackAndInit unpacks the platform-specific Terraform modules into
 // the given directory and then runs 'terraform init'.
-func unpackAndInit(dir string, platform string) (err error) {
-	err = unpack(dir, platform)
+func unpackAndInit(platform string) (err error) {
+	err = unpack(platform)
 	if err != nil {
 		return errors.Wrap(err, "failed to unpack Terraform modules")
 	}
 
-	if err := setupEmbeddedPlugins(dir); err != nil {
+	if err := setupEmbeddedPlugins(); err != nil {
 		return errors.Wrap(err, "failed to setup embedded Terraform plugins")
 	}
 
@@ -124,29 +136,28 @@ func unpackAndInit(dir string, platform string) (err error) {
 	defer lpDebug.Close()
 	defer lpError.Close()
 
-	os.Setenv("TF_CLI_CONFIG_FILE", filepath.Join(dir, "terraform.rc"))
+	os.Setenv("TF_CLI_CONFIG_FILE", "terraform.rc")
 
 	// XXX: These are only here for debugging CI
 	os.Setenv("TF_LOG", "trace")
-	os.Setenv("TERRAFORM_LOCK_FILE_PATH", dir)
 
 	args := []string{
-		fmt.Sprintf("-plugin-dir=%s", filepath.Join(dir, "plugins")),
+		fmt.Sprintf("-plugin-dir=%s", filepath.Join("plugins")),
 	}
-	args = append(args, dir)
-	if exitCode := texec.Init(dir, args, lpDebug, lpError); exitCode != 0 {
+	args = append(args, ".")
+	if exitCode := texec.Init(args, lpDebug, lpError); exitCode != 0 {
 		return errors.New("failed to initialize Terraform")
 	}
 	return nil
 }
 
-func setupEmbeddedPlugins(dir string) error {
+func setupEmbeddedPlugins() error {
 	execPath, err := os.Executable()
 	if err != nil {
 		return errors.Wrap(err, "failed to find path for the executable")
 	}
 
-	pdir := filepath.Join(dir, "plugins", "openshift", "local")
+	pdir := filepath.Join("plugins", "openshift", "local")
 	for name, plugin := range plugins.KnownPlugins {
 		dstDir := filepath.Join(pdir, plugin.Name, plugin.Version, fmt.Sprintf("linux_%s", runtime.GOARCH))
 		if err := os.MkdirAll(dstDir, 0777); err != nil {
@@ -167,4 +178,15 @@ func setupEmbeddedPlugins(dir string) error {
 		}
 	}
 	return nil
+}
+
+func changeDir(dir string) (string, error) {
+	pwd, err := os.Getwd()
+	if err != nil {
+		return "", errors.Wrap(err, "could not get working directory")
+	}
+	if err := os.Chdir(dir); err != nil {
+		return "", errors.Wrap(err, "could not change to data directory")
+	}
+	return pwd, nil
 }

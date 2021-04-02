@@ -8,9 +8,9 @@ import (
 	"runtime"
 )
 
-func globalPluginDirs(datadir string) ([]string, error) {
+func globalPluginDirs() ([]string, error) {
 	var ret []string
-	for _, d := range []string{datadir} {
+	for _, d := range []string{"."} {
 		machineDir := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
 		ret = append(ret, filepath.Join(d, "plugins"))
 		ret = append(ret, filepath.Join(d, "plugins", machineDir))
